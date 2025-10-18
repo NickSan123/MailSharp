@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="MailSharp.ApiService/MailSharp.ApiService.csproj" />
+  <Project Path="MailSharp.AppHost/MailSharp.AppHost.csproj" />
+  <Project Path="MailSharp.Core/MailSharp.Core.csproj" />
+  <Project Path="MailSharp.ServiceDefaults/MailSharp.ServiceDefaults.csproj" />
+  <Project Path="MailSharp.Tests/MailSharp.Tests.csproj" />
+  <Project Path="MailSharp.Web/MailSharp.Web.csproj" />
+  <Project Path="MailSharp.Worker/MailSharp.Worker.csproj" />
+</Solution>
