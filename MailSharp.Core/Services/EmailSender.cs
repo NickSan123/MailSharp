@@ -1,17 +1,19 @@
-﻿using MailSharp.Core.Models;
-
+﻿using MailKit;
 using MailKit.Net.Smtp;
-using MailKit;
+using MailSharp.Core.Config;
+using MailSharp.Core.Models;
 using MimeKit;
 
 namespace MailSharp.Core.Services
 {
-    public class EmailSender : IEmailSender
+    public class EmailSender(SmtpSettings smtpSettings) : IEmailSender
     {
+        private readonly SmtpSettings _smtpSettings = smtpSettings;
+
         public async Task SendAsync(EmailMessage message)
         {
             var email = new MimeMessage();
-            email.From.Add(new MailboxAddress("Online Telecom","no-reply@minhaempresa.com"));
+            email.From.Add(new MailboxAddress(_smtpSettings.SenderName, _smtpSettings.SenderEmail));
             email.To.Add(MailboxAddress.Parse(message.To));
             email.Subject = message.Subject;
 
@@ -21,8 +23,10 @@ namespace MailSharp.Core.Services
             };
 
             using var smtp = new SmtpClient();
-            await smtp.ConnectAsync("smtp.seuservidor.com", 587, MailKit.Security.SecureSocketOptions.StartTls);
-            await smtp.AuthenticateAsync("usuario", "senha");
+            await smtp.ConnectAsync(_smtpSettings.Host, _smtpSettings.Port,
+                _smtpSettings.UseStartTls ? MailKit.Security.SecureSocketOptions.StartTls
+                                          : MailKit.Security.SecureSocketOptions.Auto);
+            await smtp.AuthenticateAsync(_smtpSettings.Username, _smtpSettings.Password);
             await smtp.SendAsync(email);
             await smtp.DisconnectAsync(true);
         }

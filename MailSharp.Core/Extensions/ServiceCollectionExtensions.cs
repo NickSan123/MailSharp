@@ -1,4 +1,5 @@
-﻿using MailSharp.Core.Models;
+﻿using MailSharp.Core.Config;
+using MailSharp.Core.Models;
 using MailSharp.Core.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -12,6 +13,21 @@ public static class ServiceCollectionExtensions
         services.Configure(configureOptions);
 
         services.AddSingleton<IRabbitMQService, RabbitMQService>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddMailService(this IServiceCollection services, Action<SmtpSettings> configureOptions)
+    {
+        // Cria e configura a instância de SmtpSettings
+        var smtpSettings = new SmtpSettings();
+        configureOptions.Invoke(smtpSettings);
+
+        // Registra a instância configurada no container
+        services.AddSingleton(smtpSettings);
+
+        // Registra o serviço de envio de e-mails
+        services.AddScoped<IEmailSender, EmailSender>();
 
         return services;
     }

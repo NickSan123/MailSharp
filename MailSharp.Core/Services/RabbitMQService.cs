@@ -276,16 +276,15 @@ public class RabbitMQService(IOptions<RabbitMQOptions> options, ILogger<RabbitMQ
 
         try
         {
-            await channel.QueueDeclareAsync(
-                queue: queueName,
-                durable: true,
-                exclusive: false,
-                autoDelete: false,
-                arguments: null,
-                cancellationToken: cancellationToken
-            );
+            //await channel.QueueDeclareAsync(
+            //    queue: queueName,
+            //    durable: true,
+            //    exclusive: false,
+            //    autoDelete: false,
+            //    arguments: null,
+            //    cancellationToken: cancellationToken
+            //);
 
-            // ✅ CORREÇÃO: Usar AsyncEventingBasicConsumer que já é async por padrão
             var consumer = new AsyncEventingBasicConsumer(channel);
 
             consumer.ReceivedAsync += async (model, ea) =>

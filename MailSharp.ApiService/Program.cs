@@ -1,26 +1,30 @@
-using MailSharp.Core.Services;
+﻿using DotNetEnv;
+using MailSharp.ApiService.Endpoints;
+using MailSharp.Core.Config;
 using MailSharp.Core.Extensions;
+using MailSharp.Core.Repository;
+using MailSharp.Core.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add service defaults & Aspire client integrations.
+// Aspire defaults
 builder.AddServiceDefaults();
-
-// Add services to the container.
 builder.Services.AddProblemDetails();
-
-builder.Services.AddSingleton<IFileProcessor, FileProcessor>();
-//builder.Services.AddSingleton<EmailQueueProducer>();
-
-// Add logging
 builder.Services.AddLogging();
-
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-
 builder.Services.AddEndpointsApiExplorer();
 
+builder.Services.AddHttpClient();
+Env.Load();
 
+// Serviços internos
+builder.Services.AddSingleton<IFileProcessor, FileProcessor>();
+
+// RabbitMQ
 builder.Services.AddRabbitMQ(options =>
 {
     options.HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
@@ -29,100 +33,123 @@ builder.Services.AddRabbitMQ(options =>
     options.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest";
 });
 
+// SMTP
+builder.Services.AddMailService(options =>
+{
+    options.Host = Environment.GetEnvironmentVariable("SMTP_HOST") ?? "";
+    options.Port = int.TryParse(Environment.GetEnvironmentVariable("SMTP_PORT"), out var port) ? port : 587;
+    options.Username = Environment.GetEnvironmentVariable("SMTP_USERNAME") ?? "";
+    options.Password = Environment.GetEnvironmentVariable("SMTP_PASSWORD") ?? "";
+    options.SenderName = Environment.GetEnvironmentVariable("SMTP_SENDER_NAME") ?? "Online Telecom";
+    options.SenderEmail = Environment.GetEnvironmentVariable("SMTP_SENDER_EMAIL") ?? "no-reply@minhaempresa.com";
+    options.UseStartTls = bool.TryParse(Environment.GetEnvironmentVariable("SMTP_USE_STARTTLS"), out var useTls) && useTls;
+});
+
+// Banco de dados
+var connectionString = Environment.GetEnvironmentVariable("MAILSHARP_DB_CONNECTION");
+builder.Services.AddMailSharpDatabase(connectionString);
+
+#region Autenticação JWT via Cookie (SSO)
+
+// Melhoria: Carregar a chave pública de forma mais segura e centralizada
+var publicKeyPem = Environment.GetEnvironmentVariable("PUBLIC_RSA");
+if (string.IsNullOrWhiteSpace(publicKeyPem))
+{
+    throw new InvalidOperationException("A variável de ambiente PUBLIC_RSA não foi encontrada.");
+}
+
+using var rsa = RSA.Create();
+rsa.ImportFromPem(publicKeyPem);
+var rsaKey = new RsaSecurityKey(rsa);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    // IMPORTANTE: Em produção, use RequireHttpsMetadata = true
+    //options.RequireHttpsMetadata = Environment.IsProduction();
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidIssuer = "SSO-auth",
+        ValidateAudience = false, // Defina uma audiência se seu token tiver
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.FromMinutes(1),
+        IssuerSigningKey = rsaKey,
+        ValidateIssuerSigningKey = true
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        // Este é o lugar correto para dizer ao handler onde encontrar o token
+        OnMessageReceived = context =>
+        {
+            if (context.Request.Cookies.ContainsKey("access_token"))
+            {
+                context.Token = context.Request.Cookies["access_token"];
+            }
+            return Task.CompletedTask;
+        },
+        OnChallenge = async context =>
+        {
+            // Interceptar a resposta 401 para um formato JSON personalizado
+            context.HandleResponse();
+            context.Response.StatusCode = 401;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "Unauthorized",
+                message = "Token expirado ou inválido."
+            });
+        }
+    };
+});
+
+builder.Services.AddAuthorization();
+
+#endregion
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Pipeline de Middleware - A ORDEM É CRÍTICA
 if (app.Environment.IsDevelopment())
 {
-    app.UseDeveloperExceptionPage(); // Mostra detalhes do erro em desenvolvimento
+    app.UseDeveloperExceptionPage();
 }
 else
 {
     app.UseExceptionHandler();
+    app.UseHsts();
 }
 
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+
+// 1. Adicione o middleware de Autenticação
+app.UseAuthentication();
+
+// 2. Adicione o middleware de Autorização
+app.UseAuthorization();
+
+// Middleware customizado removido, pois o AddJwtBearer já cuida da validação.
+// app.UseMiddleware<JwtAuthMiddleware>(public_key); 
+
+// Swagger / OpenAPI
 app.MapOpenApi();
+app.UseSwaggerUI(o => o.SwaggerEndpoint("/openapi/v1.json", "v1"));
 
-app.UseSwaggerUI(options =>
-{
-    options.SwaggerEndpoint("/openapi/v1.json", "v1");
-});
+// Endpoints modulares
+app.MapTemplateEndpoints();
+app.MapUploadEmailRoutes(); // Minimal API endpoint
 
-app.MapPost("/upload-emails", async (IFormFile file, IFileProcessor fileProcessor, ILogger<Program> logger) =>
-{
-    logger.LogInformation("Upload iniciado. Nome do arquivo: {FileName}", file?.FileName);
+// Teste rápido
+app.MapGet("/", () => "Ok").AllowAnonymous();
 
-    if (file == null || file.Length == 0)
-        return Results.BadRequest("Nenhum arquivo enviado.");
-
-    // Valida��o do tipo de arquivo
-    var allowedExtensions = new[] { ".xlsx", ".xls", ".csv", ".txt", ".json" };
-    var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
-
-    if (!allowedExtensions.Contains(fileExtension))
-    {
-        return Results.BadRequest($"Tipo de arquivo n�o suportado. Use: {string.Join(", ", allowedExtensions)}");
-    }
-
-    // CORRE��O: Salva com a extens�o original em vez de .tmp
-    var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + fileExtension);
-    logger.LogInformation("Arquivo tempor�rio criado: {TempPath}", tempPath);
-
-    try
-    {
-        await using (var stream = File.Create(tempPath))
-        {
-            await file.CopyToAsync(stream);
-        }
-
-        logger.LogInformation("Arquivo salvo temporariamente. Tamanho: {Length} bytes", file.Length);
-
-        // Processa o arquivo
-        var emails = fileProcessor.ReadEmailsFromFile(tempPath);
-        var emailList = emails.ToList();
-
-        logger.LogInformation("E-mails processados: {Count} e-mails", emailList.Count);
-
-        if (!emailList.Any())
-        {
-            return Results.BadRequest("Nenhum e-mail v�lido encontrado no arquivo.");
-        }
-
-        return Results.Ok(new
-        {
-            TotalEmails = emailList.Count,
-            Emails = emailList.Take(10),
-            Message = "E-mails processados com sucesso!"
-        });
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Erro ao processar arquivo: {ErrorMessage}", ex.Message);
-        return Results.BadRequest(new { error = $"Erro ao processar arquivo: {ex.Message}" });
-    }
-    finally
-    {
-        try
-        {
-            if (File.Exists(tempPath))
-            {
-                File.Delete(tempPath);
-                logger.LogInformation("Arquivo tempor�rio removido: {TempPath}", tempPath);
-            }
-        }
-        catch (Exception cleanupEx)
-        {
-            logger.LogWarning(cleanupEx, "Erro ao remover arquivo tempor�rio");
-        }
-    }
-})
-.DisableAntiforgery()
-.Accepts<IFormFile>("multipart/form-data")
-.WithName("UploadEmails");
-
-app.MapGet("/", () => "Ok");
-
+// Blazor / Razor Components
 app.MapDefaultEndpoints();
 
 app.Run();

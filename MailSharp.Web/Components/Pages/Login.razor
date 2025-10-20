@@ -1,0 +1,88 @@
+﻿@page "/login"
+@inject NavigationManager Navigation
+@inject HttpClient Http
+
+<EditForm Model="@loginModel" OnValidSubmit="HandleLogin" FormName="loginForm">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group mb-3">
+        <label for="email">E-mail</label>
+        <InputText id="email" class="form-control" @bind-Value="loginModel.Email" />
+        <ValidationMessage For="@(() => loginModel.Email)" />
+    </div>
+
+    <div class="form-group mb-3">
+        <label for="password">Senha</label>
+        <InputText id="password" class="form-control" @bind-Value="loginModel.Password" type="password" />
+        <ValidationMessage For="@(() => loginModel.Password)" />
+    </div>
+
+    <button type="submit" class="btn btn-danger w-100" disabled="@isProcessing">Entrar</button>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-3">@errorMessage</div>
+    }
+</EditForm>
+
+@code {
+    private LoginRequest loginModel = new();
+    private string? errorMessage;
+    private bool isProcessing;
+
+    private async Task HandleLogin()
+    {
+        errorMessage = null;
+        isProcessing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            // Construir URI absoluta para o endpoint local que grava cookies HttpOnly
+            var endpoint = new Uri(new Uri(Navigation.BaseUri), "auth/proxy-login");
+
+            // Chama o endpoint server-side; ele chamará o SSO e gravará os cookies HttpOnly
+            var resp = await Http.PostAsJsonAsync(endpoint, loginModel);
+
+            if (resp.IsSuccessStatusCode)
+            {
+                // Cookies já gravados pelo servidor. Navegar.
+                try
+                {
+                    await InvokeAsync(() => Navigation.NavigateTo("/"));
+                }
+                catch (Microsoft.AspNetCore.Components.NavigationException)
+                {
+                    Navigation.NavigateTo("/", forceLoad: true);
+                }
+            }
+            else if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                errorMessage = "Usuário ou senha inválidos.";
+            }
+            else
+            {
+                var content = await resp.Content.ReadAsStringAsync();
+                errorMessage = $"Erro ao efetuar login ({(int)resp.StatusCode}).";
+                // Opcional: registrar 'content' em logs para diagnóstico
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Erro no login: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Se já existir modelo em MailSharp.Web.Models, remova essa duplicata.
+    public class LoginRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}

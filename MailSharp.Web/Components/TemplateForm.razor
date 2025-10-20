@@ -1,0 +1,59 @@
+﻿@using MailSharp.Web.Models
+@inject MailSharp.Web.Services.TemplateService TemplateService
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">@((Template.Id == 0) ? "Novo Template" : "Editar Template")</h5>
+
+        <div class="mb-2">
+            <label class="form-label">Nome</label>
+            <input class="form-control" @bind="Template.Name" />
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">Assunto</label>
+            <input class="form-control" @bind="Template.Subject" />
+        </div>
+
+        <div class="mb-2">
+            <label class="form-label">Corpo</label>
+            <textarea class="form-control" rows="6" @bind="Template.Body"></textarea>
+        </div>
+
+        <div class="mb-2 form-check">
+            <input type="checkbox" class="form-check-input" @bind="Template.IsHtml" id="isHtml" />
+            <label class="form-check-label" for="isHtml">HTML</label>
+        </div>
+
+        <button class="btn btn-success me-2" @onclick="SaveAsync" type="button">Salvar</button>
+        <button class="btn btn-secondary" @onclick="Cancel" type="button">Cancelar</button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EmailTemplateDto Template { get; set; } = new();
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private async Task SaveAsync()
+    {
+        if (Template.Id == 0)
+            await TemplateService.CreateAsync(Template);
+        else
+            await TemplateService.UpdateAsync(Template);
+
+        if (OnSaved.HasDelegate)
+            await OnSaved.InvokeAsync();
+    }
+
+    private async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+            await OnCancel.InvokeAsync();
+    }
+}

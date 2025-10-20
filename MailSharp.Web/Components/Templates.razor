@@ -1,0 +1,200 @@
+﻿@page "/templates"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using MailSharp.Web.Models
+@using Microsoft.AspNetCore.Authorization
+@inject TemplateService TemplateService
+
+<PageTitle>Templates</PageTitle>
+
+<h3 class="text-xl font-semibold mb-4">Gerenciamento de Templates</h3>
+
+<button class="btn btn-primary mb-3" @onclick="AbrirModalNovoTemplate">Novo Template</button>
+
+@if (_Templates == null)
+{
+    <p>Carregando templates...</p>
+}
+else if (_Templates.Count == 0)
+{
+    <p>Nenhum template cadastrado ainda.</p>
+}
+else
+{
+    <table class="table table-striped w-100">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Assunto</th>
+                <th>Última Atualização</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var template in _Templates)
+            {
+                <tr>
+                    <td>@template.Name</td>
+                    <td>@template.Subject</td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary me-2" @onclick="() => EditarTemplate(template)">Editar</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeletarTemplate(template.Id)">Excluir</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<!-- Modal de Confirmação para Excluir -->
+@if (MostrarModalConfirmacao)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content p-3">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger">Confirmar Exclusão</h5>
+                    <button type="button" class="btn-close" @onclick="FecharModalConfirmacao"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Tem certeza que deseja excluir o template <strong>@TemplateParaExcluir?.Name</strong>?</p>
+                    <p class="text-muted">Esta ação não pode ser desfeita.</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="FecharModalConfirmacao">Cancelar</button>
+                    <button class="btn btn-danger" @onclick="ConfirmarExclusao">Sim, Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal para Criar/Editar -->
+@if (MostrarModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5); position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content p-3">
+                <div class="modal-header">
+                    <h5 class="modal-title">@((TemplateAtual.Id == 0) ? "Novo Template" : "Editar Template")</h5>
+                    <button type="button" class="btn-close" @onclick="FecharModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nome</label>
+                        <input class="form-control" @bind="TemplateAtual.Name" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Assunto</label>
+                        <input class="form-control" @bind="TemplateAtual.Subject" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Corpo do E-mail</label>
+                        <textarea class="form-control" rows="6" @bind="TemplateAtual.Body"></textarea>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" @bind="TemplateAtual.IsHtml" id="isHtml" />
+                        <label class="form-check-label" for="isHtml">HTML</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="FecharModal">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="SalvarTemplate">Salvar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<EmailTemplateDto> _Templates = new();
+    private EmailTemplateDto TemplateAtual = new();
+    private EmailTemplateDto? TemplateParaExcluir;
+    private bool MostrarModal = false;
+    private bool MostrarModalConfirmacao = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarTemplates();
+    }
+
+    private async Task CarregarTemplates()
+    {
+        _Templates = await TemplateService.GetAllAsync() ?? new List<EmailTemplateDto>();
+    }
+
+    private void AbrirModalNovoTemplate()
+    {
+        TemplateAtual = new EmailTemplateDto();
+        MostrarModal = true;
+        StateHasChanged();
+    }
+
+    private void EditarTemplate(EmailTemplateDto template)
+    {
+        TemplateAtual = new EmailTemplateDto
+        {
+            Id = template.Id,
+            Name = template.Name,
+            Subject = template.Subject,
+            Body = template.Body,
+            IsHtml = template.IsHtml
+        };
+        MostrarModal = true;
+        StateHasChanged();
+    }
+
+    private void FecharModal()
+    {
+        MostrarModal = false;
+        StateHasChanged();
+    }
+
+    private async Task DeletarTemplate(int id)
+    {
+        // Encontra o template pelo ID
+        TemplateParaExcluir = _Templates.FirstOrDefault(t => t.Id == id);
+        if (TemplateParaExcluir != null)
+        {
+            MostrarModalConfirmacao = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConfirmarExclusao()
+    {
+        if (TemplateParaExcluir != null)
+        {
+            // Descomente esta linha quando seu serviço tiver o método DeleteAsync
+            // await TemplateService.DeleteAsync(TemplateParaExcluir.Id);
+
+            Console.WriteLine($"Excluindo template: {TemplateParaExcluir.Name}");
+
+            // Remove da lista local
+            _Templates.RemoveAll(t => t.Id == TemplateParaExcluir.Id);
+
+            // Atualiza a UI
+            StateHasChanged();
+        }
+
+        FecharModalConfirmacao();
+    }
+
+    private void FecharModalConfirmacao()
+    {
+        MostrarModalConfirmacao = false;
+        TemplateParaExcluir = null;
+        StateHasChanged();
+    }
+
+    private async Task SalvarTemplate()
+    {
+        if (TemplateAtual.Id == 0)
+            await TemplateService.CreateAsync(TemplateAtual);
+        else
+            await TemplateService.UpdateAsync(TemplateAtual);
+
+        await CarregarTemplates();
+        FecharModal();
+    }
+}

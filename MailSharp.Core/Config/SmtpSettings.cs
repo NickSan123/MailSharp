@@ -10,7 +10,7 @@ public class SmtpSettings
     public int Port { get; set; }
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-    public string SenderName { get; set; } = "Online Telecom";
+    public string SenderName { get; set; } = "Empresa";
     public string SenderEmail { get; set; } = "no-reply@minhaempresa.com";
     public bool UseStartTls { get; set; } = true;
 }

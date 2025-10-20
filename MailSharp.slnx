@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Itens de Solução/">
+    <File Path="dockerfile.api" />
+  </Folder>
   <Project Path="MailSharp.ApiService/MailSharp.ApiService.csproj" />
   <Project Path="MailSharp.AppHost/MailSharp.AppHost.csproj" />
   <Project Path="MailSharp.Core/MailSharp.Core.csproj" />

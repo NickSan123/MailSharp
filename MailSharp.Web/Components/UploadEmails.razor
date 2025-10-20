@@ -1,0 +1,102 @@
+﻿@page "/upload-emails"
+@rendermode InteractiveServer
+@using MailSharp.Web.Models
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject TemplateService TemplateService
+@inject EmailService EmailService
+
+<PageTitle>Upload de Emails</PageTitle>
+
+<h3 class="text-xl font-semibold mb-4">Upload de Emails</h3>
+
+<div class="mb-3">
+    <label class="form-label">Selecione o Template</label>
+    <select class="form-select" @bind="TemplateSelecionadoId">
+        <option value="">-- Escolha um template --</option>
+        @if (_Templates != null)
+        {
+            @foreach (var template in _Templates)
+            {
+                <option value="@template.Id">@template.Name</option>
+            }
+        }
+    </select>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Escolha o arquivo de emails (CSV)</label>
+    <InputFile OnChange="OnInputFileChange" />
+</div>
+
+@if (EmailsCarregados != null && EmailsCarregados.Count > 0)
+{
+    <div class="mb-3">
+        <p>@EmailsCarregados.Count emails carregados:</p>
+        <ul class="list-group">
+            @foreach (var email in EmailsCarregados)
+            {
+                <li class="list-group-item">@email</li>
+            }
+        </ul>
+    </div>
+
+    <button class="btn btn-success" @onclick="ProcessarEmails">Enviar / Processar</button>
+}
+
+@code {
+    private List<EmailTemplateDto> _Templates = new();
+    private int? TemplateSelecionadoId;
+    private List<string> EmailsCarregados = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _Templates = await TemplateService.GetAllAsync() ?? new List<EmailTemplateDto>();
+    }
+
+    private void OnInputFileChange(InputFileChangeEventArgs e)
+    {
+        var arquivo = e.File;
+        EmailsCarregados.Clear();
+
+        using var stream = arquivo.OpenReadStream();
+        using var reader = new StreamReader(stream);
+
+        while (!reader.EndOfStream)
+        {
+            // Use ReadLineAsync para não bloquear
+            var linha = reader.ReadLine();
+            if (!string.IsNullOrWhiteSpace(linha))
+            {
+                EmailsCarregados.Add(linha.Trim());
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ProcessarEmails()
+    {
+        if (TemplateSelecionadoId == null)
+        {
+            Console.WriteLine("Selecione um template antes de processar.");
+            return;
+        }
+
+        var template = _Templates.FirstOrDefault(t => t.Id == TemplateSelecionadoId.Value);
+        if (template == null)
+        {
+            Console.WriteLine("Template selecionado inválido.");
+            return;
+        }
+
+        Console.WriteLine($"Enviando {EmailsCarregados.Count} emails usando o template: {template.Name}");
+
+        // Aqui você chamaria o serviço real para processar ou enviar
+        // await EmailService.UploadEmailsAsync(EmailsCarregados, template);
+
+        // Limpa a lista após processar
+        EmailsCarregados.Clear();
+        StateHasChanged();
+    }
+}
