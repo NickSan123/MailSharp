@@ -1,6 +1,6 @@
 ﻿@page "/login"
 @inject NavigationManager Navigation
-@inject HttpClient Http
+@inject IJSRuntime JS
 
 <EditForm Model="@loginModel" OnValidSubmit="HandleLogin" FormName="loginForm">
     <DataAnnotationsValidator />
@@ -31,23 +31,45 @@
     private string? errorMessage;
     private bool isProcessing;
 
+    private bool _interactive;
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _interactive = true;
+        }
+
+        return Task.CompletedTask;
+    }
+
     private async Task HandleLogin()
     {
+        if (!_interactive)
+        {
+            errorMessage = "Aguarde a inicialização do cliente...";
+            return;
+        }
+
         errorMessage = null;
         isProcessing = true;
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            // Construir URI absoluta para o endpoint local que grava cookies HttpOnly
-            var endpoint = new Uri(new Uri(Navigation.BaseUri), "auth/proxy-login");
+            // Chamada feita no browser via JS fetch para que o Set-Cookie do servidor seja entregue
+            var result = await JS.InvokeAsync<object>("mailsharp.postJson", "/auth/proxy-login", loginModel);
+            // result é um objeto com { status, ok, body }
+            var status = await ((IJSInProcessObjectReference)result).InvokeAsync<int>("eval", "this.status");
+            var ok = await ((IJSInProcessObjectReference)result).InvokeAsync<bool>("eval", "this.ok");
+            // fallback: usar dinâmica (não ideal), mas verificar via JSON string se necessário
+            // Para simplicidade, vamos extrair via JSON no C#:
+            var json = System.Text.Json.JsonSerializer.Serialize(result);
+            var parsed = System.Text.Json.JsonSerializer.Deserialize<JsonResponse?>(json);
 
-            // Chama o endpoint server-side; ele chamará o SSO e gravará os cookies HttpOnly
-            var resp = await Http.PostAsJsonAsync(endpoint, loginModel);
-
-            if (resp.IsSuccessStatusCode)
+            if (parsed is not null && parsed.ok)
             {
-                // Cookies já gravados pelo servidor. Navegar.
+                // Cookies HttpOnly já gravados no browser. Navegar.
                 try
                 {
                     await InvokeAsync(() => Navigation.NavigateTo("/"));
@@ -57,16 +79,17 @@
                     Navigation.NavigateTo("/", forceLoad: true);
                 }
             }
-            else if (resp.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-            {
-                errorMessage = "Usuário ou senha inválidos.";
-            }
             else
             {
-                var content = await resp.Content.ReadAsStringAsync();
-                errorMessage = $"Erro ao efetuar login ({(int)resp.StatusCode}).";
-                // Opcional: registrar 'content' em logs para diagnóstico
+                if (parsed != null && parsed.status == 401)
+                    errorMessage = "Usuário ou senha inválidos.";
+                else
+                    errorMessage = $"Erro ao efetuar login ({parsed?.status}).";
             }
+        }
+        catch (JSException jsEx)
+        {
+            errorMessage = $"Erro na chamada cliente: {jsEx.Message}";
         }
         catch (Exception ex)
         {
@@ -79,10 +102,16 @@
         }
     }
 
-    // Se já existir modelo em MailSharp.Web.Models, remova essa duplicata.
     public class LoginRequest
     {
         public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
+    }
+
+    private class JsonResponse
+    {
+        public int status { get; set; }
+        public bool ok { get; set; }
+        public string? body { get; set; }
     }
 }

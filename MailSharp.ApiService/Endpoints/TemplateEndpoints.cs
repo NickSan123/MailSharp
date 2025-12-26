@@ -18,14 +18,14 @@ public static class TemplateEndpoints
         {
             var templates = await db.EmailTemplates.ToListAsync();
             return Results.Ok(templates);
-        });
+        }).AllowAnonymous();
 
         // 🔹 GET /api/templates/{id}
         group.MapGet("/{id:int}", async ([FromServices] MailSharpDbContext db, int id) =>
         {
             var template = await db.EmailTemplates.FindAsync(id);
             return template is not null ? Results.Ok(template) : Results.NotFound();
-        });
+        }).AllowAnonymous();
 
         // 🔹 POST /api/templates
         group.MapPost("/", async ([FromServices] MailSharpDbContext db, [FromBody] EmailTemplate model) =>

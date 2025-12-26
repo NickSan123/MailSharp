@@ -24,14 +24,18 @@ Env.Load();
 // Serviços internos
 builder.Services.AddSingleton<IFileProcessor, FileProcessor>();
 
-// RabbitMQ
+// RabbitMQ: agora lê também o virtual host da variável de ambiente RABBITMQ_VHOST
 builder.Services.AddRabbitMQ(options =>
 {
     options.HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
     options.Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT") ?? "5672");
     options.UserName = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME") ?? "guest";
     options.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest";
-});
+    options.ClientProvidedName = Environment.GetEnvironmentVariable("CLIENT_PROVIDED_NAME") ?? "mailsharp-service";
+
+    // novo: virtual host
+    options.VirtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VHOST") ?? "/";
+ });
 
 // SMTP
 builder.Services.AddMailService(options =>
@@ -134,9 +138,6 @@ app.UseAuthentication();
 
 // 2. Adicione o middleware de Autorização
 app.UseAuthorization();
-
-// Middleware customizado removido, pois o AddJwtBearer já cuida da validação.
-// app.UseMiddleware<JwtAuthMiddleware>(public_key); 
 
 // Swagger / OpenAPI
 app.MapOpenApi();

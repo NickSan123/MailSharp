@@ -7,6 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.1" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.15.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.15.0" />
+    <PackageReference Include="Microsoft.Owin.Security.Jwt" Version="4.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MailSharp.Core\MailSharp.Core.csproj" />
     <ProjectReference Include="..\MailSharp.ServiceDefaults\MailSharp.ServiceDefaults.csproj" />
   </ItemGroup>

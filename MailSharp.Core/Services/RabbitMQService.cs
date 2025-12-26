@@ -310,7 +310,15 @@ public class RabbitMQService(IOptions<RabbitMQOptions> options, ILogger<RabbitMQ
                     _logger.LogError(ex, $"Erro ao processar mensagem da fila {queueName}");
                     if (!autoAck)
                     {
-                        await channel.BasicNackAsync(ea.DeliveryTag, false, true, cancellationToken);
+                        try
+                        {
+                            await channel.BasicNackAsync(ea.DeliveryTag, false, true, cancellationToken);
+                        }
+                        catch (Exception nackEx)
+                        {
+                            _logger.LogError(nackEx, $"Erro ao enviar Nack para mensagem da fila {queueName}");
+
+                        }
                     }
                 }
             };

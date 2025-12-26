@@ -70,6 +70,6 @@ public static class UploadEndpoints
         .Accepts<UploadEmailsRequest>("multipart/form-data")
         .WithName("UploadEmails")
         .WithTags("Emails")
-        .DisableAntiforgery().RequireAuthorization();
+        .DisableAntiforgery().AllowAnonymous();
     }
 }
