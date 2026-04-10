@@ -1,6 +1,5 @@
-﻿using MailSharp.Core.Database;
-using MailSharp.Core.Entities;
-using MailSharp.Core.Repository;
+﻿using MailSharp.Core.Entities;
+using MailSharp.Infrastructure.Database;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 

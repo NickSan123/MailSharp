@@ -2,9 +2,9 @@
 
 public class EmailMessage
 {
-    public string To { get; set; } = default!;
+    public required string To { get; set; }
     public string Subject { get; set; } = default!;
-    public string Body { get; set; } = default!;
+    public required string Body { get; set; } = default!;
     public bool IsHtml { get; set; } = true;
     public string? Cc { get; set; }
     public string? Bcc { get; set; }

@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace MailSharp.Core.Entities;
+﻿namespace MailSharp.Core.Entities;
 
 public class EmailMessageEntity
 {
@@ -14,6 +10,7 @@ public class EmailMessageEntity
     public string Body { get; set; } = string.Empty;
     public bool IsHtml { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public required string Key { get; set; }
     public bool SentSuccessfully { get; set; }
     public string? ErrorMessage { get; set; }
 }

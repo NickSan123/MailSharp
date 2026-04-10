@@ -6,6 +6,7 @@
   <Project Path="MailSharp.ApiService/MailSharp.ApiService.csproj" />
   <Project Path="MailSharp.AppHost/MailSharp.AppHost.csproj" />
   <Project Path="MailSharp.Core/MailSharp.Core.csproj" />
+  <Project Path="MailSharp.Infrastructure/MailSharp.Infrastructure.csproj" Id="4fb1be39-e173-4349-a2ff-4232a76da4e2" />
   <Project Path="MailSharp.ServiceDefaults/MailSharp.ServiceDefaults.csproj" />
   <Project Path="MailSharp.Tests/MailSharp.Tests.csproj" />
   <Project Path="MailSharp.Web/MailSharp.Web.csproj" />

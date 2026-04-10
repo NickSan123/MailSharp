@@ -1,8 +1,8 @@
-﻿using MailSharp.Core.Database;
-using MailSharp.Core.Entities;
+﻿using MailSharp.Core.Entities;
+using MailSharp.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 
-namespace MailSharp.Core.Repository;
+namespace MailSharp.Infrastructure.Repository;
 
 
 public class EmailMessageRepository(MailSharpDbContext db) : IEmailMessageRepository
@@ -14,8 +14,9 @@ public class EmailMessageRepository(MailSharpDbContext db) : IEmailMessageReposi
         _db.EmailMessages.Add(emailMessage);
         await _db.SaveChangesAsync();
     }
-    public async Task<IEnumerable<EmailMessageEntity>> GetAsync()
+
+    public async Task<EmailMessageEntity?> GetByEmailAndKeyAsync(string email, string key)
     {
-        return await _db.EmailMessages.ToListAsync();
+        return await _db.EmailMessages.Where(x=> x.To == email && x.Key == key).FirstOrDefaultAsync();
     }
 }

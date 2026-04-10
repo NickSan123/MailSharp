@@ -1,10 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
-namespace MailSharp.Core.Database;
+namespace MailSharp.Infrastructure.Database;
 
 public class MailSharpDbContextFactory : IDesignTimeDbContextFactory<MailSharpDbContext>
 {

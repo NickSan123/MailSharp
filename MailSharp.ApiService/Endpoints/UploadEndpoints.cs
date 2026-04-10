@@ -1,10 +1,10 @@
-﻿using MailSharp.ApiService.Dto;
-using MailSharp.Core.Models; // Certifique-se de que EmailMessage está aqui
-using MailSharp.Core.Repository;
-using MailSharp.Core.Services; // Adicione o using para IRabbitMQService
+﻿using easy_rabbitmq.Abstractions;
+using easy_rabbitmq.Configuration;
+using MailSharp.ApiService.Dto;
+using MailSharp.Core.Models;
+using MailSharp.Core.Services;
+using MailSharp.Infrastructure.Repository;
 using Microsoft.AspNetCore.Mvc;
-
-namespace MailSharp.ApiService.Endpoints;
 
 public static class UploadEndpoints
 {
@@ -13,26 +13,41 @@ public static class UploadEndpoints
         app.MapPost("/emails/upload", async (
             [FromForm] UploadEmailsRequest request,
             IFileProcessor fileProcessor,
-            // Remova o IEmailSender daqui
-            // IEmailSender sender, 
-            IRabbitMQService rabbitMQService, // Adicione o IRabbitMQService aqui
+            IRabbitMQPublisher rabbitMQService,
             IEmailTemplateRepository repo,
             ILogger<Program> logger) =>
         {
+            if (request.File == null || request.File.Length == 0)
+                return Results.BadRequest("Arquivo inválido.");
+
             var template = await repo.GetByIdAsync(request.TemplateId);
             if (template == null)
                 return Results.BadRequest("Template de e-mail não encontrado.");
 
-            var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + Path.GetExtension(request.File.FileName));
-            await using (var stream = File.Create(tempPath))
-                await request.File.CopyToAsync(stream);
+            // 👉 leitura em memória (sem disco)
+            using var stream = request.File.OpenReadStream();
+            var emails = fileProcessor.ReadEmailsFromStream(stream, request.File.FileName)
+    .ToList();
 
-            var emails = fileProcessor.ReadEmailsFromFile(tempPath).ToList();
+            if (emails.Count == 0)
+                return Results.BadRequest("Nenhum e-mail encontrado no arquivo.");
+
+            var topology = new RabbitMQTopology
+            {
+                Exchange = "mailsharp.emails",
+                ExchangeType = easy_rabbitmq.Enums.RabbitMQExchangeType.Direct,
+                Durable = true,
+                Queues =
+                [
+                    new() { Queue = "mailsharp.emails", RoutingKey = "emails.send", Durable = true },
+                ]
+            };
+
             var queuedEmailsCount = 0;
 
-            foreach (var email in emails)
+            // paralelismo controlado
+            var tasks = emails.Select(async email =>
             {
-                // Crie a mensagem de e-mail
                 var emailMessage = new EmailMessage
                 {
                     To = email,
@@ -43,23 +58,22 @@ public static class UploadEndpoints
 
                 try
                 {
-                    // Publique a mensagem na fila em vez de enviar diretamente
                     await rabbitMQService.PublishAsync(
-                        queueName: "mail_sharp", // O nome da fila deve ser o mesmo que o worker escuta
-                        message: emailMessage
+                        exchange: topology.Exchange,
+                        message: emailMessage,
+                        routingKey: "emails.send" // corrigido
                     );
-                    queuedEmailsCount++;
+
+                    Interlocked.Increment(ref queuedEmailsCount);
                 }
                 catch (Exception ex)
                 {
-                    // Se falhar ao adicionar na fila, logue o erro
                     logger.LogError(ex, "Falha ao enfileirar o e-mail para: {Email}", email);
                 }
-            }
+            });
 
-            File.Delete(tempPath);
+            await Task.WhenAll(tasks);
 
-            // Altere a mensagem de retorno para refletir a nova ação
             return Results.Ok(new
             {
                 TotalEmails = emails.Count,
@@ -70,6 +84,7 @@ public static class UploadEndpoints
         .Accepts<UploadEmailsRequest>("multipart/form-data")
         .WithName("UploadEmails")
         .WithTags("Emails")
-        .DisableAntiforgery().AllowAnonymous();
+        .DisableAntiforgery()
+        .AllowAnonymous();
     }
 }

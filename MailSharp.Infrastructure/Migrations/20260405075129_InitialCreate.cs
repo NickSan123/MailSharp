@@ -4,7 +4,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace MailSharp.Core.Migrations
+namespace MailSharp.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -43,6 +43,7 @@ namespace MailSharp.Core.Migrations
                     Body = table.Column<string>(type: "text", nullable: false),
                     IsHtml = table.Column<bool>(type: "boolean", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Key = table.Column<string>(type: "text", nullable: false),
                     SentSuccessfully = table.Column<bool>(type: "boolean", nullable: false),
                     ErrorMessage = table.Column<string>(type: "text", nullable: true)
                 },

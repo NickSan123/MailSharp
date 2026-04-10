@@ -2,62 +2,61 @@
 using MiniExcelLibs;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace MailSharp.Core.Services;
 
 public class FileProcessor : IFileProcessor
 {
-    public IEnumerable<string> ReadEmailsFromFile(string filePath)
-    {
-        if (!File.Exists(filePath))
-            throw new FileNotFoundException("Arquivo não encontrado", filePath);
+    private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
 
-        var ext = Path.GetExtension(filePath).ToLower();
+    public IEnumerable<string> ReadEmailsFromStream(Stream stream, string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLower();
 
         return ext switch
         {
-            ".csv" => ProcessCsv(filePath),
-            ".json" => ProcessJson(filePath),
-            ".xlsx" or ".xls" => ProcessExcel(filePath),
-            ".txt" => ProcessText(filePath),
+            ".csv" => ProcessCsv(stream),
+            ".json" => ProcessJson(stream),
+            ".xlsx" or ".xls" => ProcessExcel(stream),
+            ".txt" => ProcessText(stream),
             _ => throw new NotSupportedException($"Extensão {ext} não suportada")
         };
     }
 
-    private static IEnumerable<string> ProcessCsv(string filePath)
+    public IEnumerable<string> ProcessCsv(Stream stream)
     {
-        using var reader = new StreamReader(filePath);
+        using var reader = new StreamReader(stream);
         using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
 
-        var emails = new List<string>();
+        var emails = new HashSet<string>();
 
         while (csv.Read())
         {
-            for (int i = 0; i < csv.HeaderRecord?.Length; i++)
+            for (int i = 0; csv.TryGetField(i, out string? value); i++)
             {
-                var value = csv.GetField(i)?.Trim();
-                if (!string.IsNullOrEmpty(value) && value.Contains("@"))
-                {
-                    emails.Add(value);
-                }
+                var email = value?.Trim();
+                if (IsValidEmail(email))
+                    emails.Add(email!);
             }
         }
 
-        return emails.Distinct();
+        return emails;
     }
 
-    private static IEnumerable<string> ProcessJson(string filePath)
+    private static IEnumerable<string> ProcessJson(Stream stream)
     {
-        var json = File.ReadAllText(filePath);
-        var emails = JsonSerializer.Deserialize<List<string>>(json);
-        return emails?.Where(e => !string.IsNullOrEmpty(e) && e.Contains("@")).Distinct()
-               ?? Enumerable.Empty<string>();
+        var emails = JsonSerializer.Deserialize<List<string>>(stream);
+
+        return emails?
+            .Where(IsValidEmail)
+            .Distinct() ?? Enumerable.Empty<string>();
     }
 
-    private static IEnumerable<string> ProcessExcel(string filePath)
+    private static IEnumerable<string> ProcessExcel(Stream stream)
     {
-        var rows = MiniExcel.Query(filePath);
-        var emails = new List<string>();
+        var rows = MiniExcel.Query(stream);
+        var emails = new HashSet<string>();
 
         foreach (var row in rows)
         {
@@ -66,22 +65,33 @@ public class FileProcessor : IFileProcessor
                 foreach (var value in dict.Values)
                 {
                     var email = value?.ToString()?.Trim();
-                    if (!string.IsNullOrEmpty(email) && email.Contains("@"))
-                    {
-                        emails.Add(email);
-                    }
+                    if (IsValidEmail(email))
+                        emails.Add(email!);
                 }
             }
         }
 
-        return emails.Distinct();
+        return emails;
     }
 
-    private static IEnumerable<string> ProcessText(string filePath)
+    private static IEnumerable<string> ProcessText(Stream stream)
     {
-        return File.ReadAllLines(filePath)
-            .Select(line => line.Trim())
-            .Where(line => !string.IsNullOrEmpty(line) && line.Contains("@"))
-            .Distinct();
+        using var reader = new StreamReader(stream);
+
+        var emails = new HashSet<string>();
+
+        while (!reader.EndOfStream)
+        {
+            var line = reader.ReadLine()?.Trim();
+            if (IsValidEmail(line))
+                emails.Add(line!);
+        }
+
+        return emails;
+    }
+
+    private static bool IsValidEmail(string? email)
+    {
+        return !string.IsNullOrWhiteSpace(email) && EmailRegex.IsMatch(email);
     }
 }

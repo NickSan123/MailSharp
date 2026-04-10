@@ -1,7 +1,6 @@
 ﻿using MailSharp.Core.Entities;
 using Microsoft.EntityFrameworkCore;
-
-namespace MailSharp.Core.Database;
+namespace MailSharp.Infrastructure.Database;
 
 public class MailSharpDbContext(DbContextOptions<MailSharpDbContext> options) : DbContext(options)
 {

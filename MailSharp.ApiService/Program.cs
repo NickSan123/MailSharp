@@ -1,13 +1,8 @@
 ﻿using DotNetEnv;
+using easy_rabbitmq.Extensions;
 using MailSharp.ApiService.Endpoints;
-using MailSharp.Core.Config;
-using MailSharp.Core.Extensions;
-using MailSharp.Core.Repository;
 using MailSharp.Core.Services;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Security.Cryptography;
-using System.Text;
+using MailSharp.Infrastructure.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,19 +20,28 @@ Env.Load();
 builder.Services.AddSingleton<IFileProcessor, FileProcessor>();
 
 // RabbitMQ: agora lê também o virtual host da variável de ambiente RABBITMQ_VHOST
-builder.Services.AddRabbitMQ(options =>
+//builder.Services.AddRabbitMQ(options =>
+//{
+//    options.HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
+//    options.Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT") ?? "5672");
+//    options.UserName = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME") ?? "guest";
+//    options.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest";
+//    options.ClientProvidedName = Environment.GetEnvironmentVariable("CLIENT_PROVIDED_NAME") ?? "mailsharp-service";
+
+//    // novo: virtual host
+//    options.VirtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VHOST") ?? "/";
+// });
+
+// SMTP
+builder.Services.AddEasyRabbitMQ(options =>
 {
     options.HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
     options.Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT") ?? "5672");
     options.UserName = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME") ?? "guest";
     options.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest";
     options.ClientProvidedName = Environment.GetEnvironmentVariable("CLIENT_PROVIDED_NAME") ?? "mailsharp-service";
-
-    // novo: virtual host
-    options.VirtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VHOST") ?? "/";
- });
-
-// SMTP
+    options.VirtualHost = "/";
+});
 builder.Services.AddMailService(options =>
 {
     options.Host = Environment.GetEnvironmentVariable("SMTP_HOST") ?? "";
@@ -50,72 +54,72 @@ builder.Services.AddMailService(options =>
 });
 
 // Banco de dados
-var connectionString = Environment.GetEnvironmentVariable("MAILSHARP_DB_CONNECTION");
+var connectionString = Environment.GetEnvironmentVariable("MAILSHARP_DB_CONNECTION") ?? "Host=localhost;Port=5432;Database=mailsharp_db;Username=postgres;Password=postgres";
 builder.Services.AddMailSharpDatabase(connectionString);
 
-#region Autenticação JWT via Cookie (SSO)
+//#region Autenticação JWT via Cookie (SSO)
 
-// Melhoria: Carregar a chave pública de forma mais segura e centralizada
-var publicKeyPem = Environment.GetEnvironmentVariable("PUBLIC_RSA");
-if (string.IsNullOrWhiteSpace(publicKeyPem))
-{
-    throw new InvalidOperationException("A variável de ambiente PUBLIC_RSA não foi encontrada.");
-}
+//// Melhoria: Carregar a chave pública de forma mais segura e centralizada
+//var publicKeyPem = Environment.GetEnvironmentVariable("PUBLIC_RSA");
+//if (string.IsNullOrWhiteSpace(publicKeyPem))
+//{
+//    throw new InvalidOperationException("A variável de ambiente PUBLIC_RSA não foi encontrada.");
+//}
 
-using var rsa = RSA.Create();
-rsa.ImportFromPem(publicKeyPem);
-var rsaKey = new RsaSecurityKey(rsa);
+//using var rsa = RSA.Create();
+//rsa.ImportFromPem(publicKeyPem);
+//var rsaKey = new RsaSecurityKey(rsa);
 
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    // IMPORTANTE: Em produção, use RequireHttpsMetadata = true
-    //options.RequireHttpsMetadata = Environment.IsProduction();
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidIssuer = "SSO-auth",
-        ValidateAudience = false, // Defina uma audiência se seu token tiver
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.FromMinutes(1),
-        IssuerSigningKey = rsaKey,
-        ValidateIssuerSigningKey = true
-    };
+//builder.Services.AddAuthentication(options =>
+//{
+//    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+//    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+//})
+//.AddJwtBearer(options =>
+//{
+//    // IMPORTANTE: Em produção, use RequireHttpsMetadata = true
+//    //options.RequireHttpsMetadata = Environment.IsProduction();
+//    options.SaveToken = true;
+//    options.TokenValidationParameters = new TokenValidationParameters
+//    {
+//        ValidateIssuer = true,
+//        ValidIssuer = "SSO-auth",
+//        ValidateAudience = false, // Defina uma audiência se seu token tiver
+//        ValidateLifetime = true,
+//        ClockSkew = TimeSpan.FromMinutes(1),
+//        IssuerSigningKey = rsaKey,
+//        ValidateIssuerSigningKey = true
+//    };
 
-    options.Events = new JwtBearerEvents
-    {
-        // Este é o lugar correto para dizer ao handler onde encontrar o token
-        OnMessageReceived = context =>
-        {
-            if (context.Request.Cookies.ContainsKey("access_token"))
-            {
-                context.Token = context.Request.Cookies["access_token"];
-            }
-            return Task.CompletedTask;
-        },
-        OnChallenge = async context =>
-        {
-            // Interceptar a resposta 401 para um formato JSON personalizado
-            context.HandleResponse();
-            context.Response.StatusCode = 401;
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsJsonAsync(new
-            {
-                error = "Unauthorized",
-                message = "Token expirado ou inválido."
-            });
-        }
-    };
-});
+//    options.Events = new JwtBearerEvents
+//    {
+//        // Este é o lugar correto para dizer ao handler onde encontrar o token
+//        OnMessageReceived = context =>
+//        {
+//            if (context.Request.Cookies.ContainsKey("access_token"))
+//            {
+//                context.Token = context.Request.Cookies["access_token"];
+//            }
+//            return Task.CompletedTask;
+//        },
+//        OnChallenge = async context =>
+//        {
+//            // Interceptar a resposta 401 para um formato JSON personalizado
+//            context.HandleResponse();
+//            context.Response.StatusCode = 401;
+//            context.Response.ContentType = "application/json";
+//            await context.Response.WriteAsJsonAsync(new
+//            {
+//                error = "Unauthorized",
+//                message = "Token expirado ou inválido."
+//            });
+//        }
+//    };
+//});
 
-builder.Services.AddAuthorization();
+//builder.Services.AddAuthorization();
 
-#endregion
+//#endregion
 
 var app = builder.Build();
 
@@ -134,10 +138,10 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 // 1. Adicione o middleware de Autenticação
-app.UseAuthentication();
+//app.UseAuthentication();
 
 // 2. Adicione o middleware de Autorização
-app.UseAuthorization();
+//app.UseAuthorization();
 
 // Swagger / OpenAPI
 app.MapOpenApi();

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Worker">
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,15 +7,22 @@
     <UserSecretsId>dotnet-MailSharp.Worker-ce9606fd-aeca-4381-a3b2-3b949f090ab6</UserSecretsId>
   </PropertyGroup>
 
+	<ItemGroup>
+		<Compile Remove="readme" />
+		<None Include="readme" />
+	</ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.10" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0-rc.2.25502.107" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="easy_rabbitmq" Version="1.0.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MailSharp.Core\MailSharp.Core.csproj" />
+    <ProjectReference Include="..\MailSharp.Infrastructure\MailSharp.Infrastructure.csproj" />
     <ProjectReference Include="..\MailSharp.ServiceDefaults\MailSharp.ServiceDefaults.csproj" />
   </ItemGroup>
 </Project>

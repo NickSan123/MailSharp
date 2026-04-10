@@ -1,6 +1,6 @@
 ﻿using MailSharp.Core.Entities;
 
-namespace MailSharp.Core.Repository;
+namespace MailSharp.Infrastructure.Repository;
 
 public interface IEmailTemplateRepository
 {
