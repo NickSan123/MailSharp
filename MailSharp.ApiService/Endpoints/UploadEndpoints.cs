@@ -5,86 +5,114 @@ using MailSharp.Core.Models;
 using MailSharp.Core.Services;
 using MailSharp.Infrastructure.Repository;
 using Microsoft.AspNetCore.Mvc;
+using System.Net.Mail;
 
-public static class UploadEndpoints
+namespace MailSharp.ApiService.Endpoints
 {
-    public static void MapUploadEmailRoutes(this IEndpointRouteBuilder app)
+    public static class UploadEndpoints
     {
-        app.MapPost("/emails/upload", async (
-            [FromForm] UploadEmailsRequest request,
-            IFileProcessor fileProcessor,
-            IRabbitMQPublisher rabbitMQService,
-            IEmailTemplateRepository repo,
-            ILogger<Program> logger) =>
+        public static void MapUploadEmailRoutes(this IEndpointRouteBuilder app)
         {
-            if (request.File == null || request.File.Length == 0)
-                return Results.BadRequest("Arquivo inválido.");
-
-            var template = await repo.GetByIdAsync(request.TemplateId);
-            if (template == null)
-                return Results.BadRequest("Template de e-mail não encontrado.");
-
-            // 👉 leitura em memória (sem disco)
-            using var stream = request.File.OpenReadStream();
-            var emails = fileProcessor.ReadEmailsFromStream(stream, request.File.FileName)
-    .ToList();
-
-            if (emails.Count == 0)
-                return Results.BadRequest("Nenhum e-mail encontrado no arquivo.");
-
-            var topology = new RabbitMQTopology
+            app.MapPost("/emails/upload", async (
+                [FromForm] UploadEmailsRequest request,
+                IFileProcessor fileProcessor,
+                IRabbitMQPublisher rabbitMQService,
+                IEmailTemplateRepository repo,
+                ILogger<Program> logger) =>
             {
-                Exchange = "mailsharp.emails",
-                ExchangeType = easy_rabbitmq.Enums.RabbitMQExchangeType.Direct,
-                Durable = true,
-                Queues =
-                [
-                    new() { Queue = "mailsharp.emails", RoutingKey = "emails.send", Durable = true },
-                ]
-            };
+                if (request.File == null || request.File.Length == 0)
+                    return Results.BadRequest("Arquivo inválido.");
 
-            var queuedEmailsCount = 0;
+                var template = await repo.GetByIdAsync(request.TemplateId);
+                if (template == null)
+                    return Results.BadRequest("Template de e-mail não encontrado.");
 
-            // paralelismo controlado
-            var tasks = emails.Select(async email =>
-            {
-                var emailMessage = new EmailMessage
+                // leitura em memória (sem disco)
+                using var stream = request.File.OpenReadStream();
+
+                var rawEmails = fileProcessor
+                    .ReadEmailsFromStream(stream, request.File.FileName)
+                    .ToList();
+
+                if (rawEmails.Count == 0)
+                    return Results.BadRequest("Nenhum e-mail encontrado no arquivo.");
+
+                var emails = rawEmails
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Where(x => MailAddress.TryCreate(x, out _))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                foreach (var email in emails)
                 {
-                    To = email,
-                    Subject = template.Subject,
-                    Body = template.Body,
-                    IsHtml = template.IsHtml
+                    logger.LogInformation("Email lido: {Email}", email);
+                }
+
+                var topology = new RabbitMQTopology
+                {
+                    Exchange = "mailsharp.emails",
+                    ExchangeType = easy_rabbitmq.Enums.RabbitMQExchangeType.Direct,
+                    Durable = true,
+                    Queues =
+                    [
+                        new() { Queue = "mailsharp.emails", RoutingKey = "emails.send", Durable = true },
+                    ]
                 };
 
-                try
+                var queuedEmailsCount = 0;
+
+                var uniqueEmails = emails
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Select(x => x.Trim())
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                if (uniqueEmails.Count == 0)
+                    return Results.BadRequest("Nenhum e-mail válido encontrado no arquivo.");
+                // paralelismo controlado
+                var tasks = uniqueEmails.Select(async email =>
                 {
-                    await rabbitMQService.PublishAsync(
-                        exchange: topology.Exchange,
-                        message: emailMessage,
-                        routingKey: "emails.send" // corrigido
-                    );
+                    var emailMessage = new EmailMessage
+                    {
+                        To = email,
+                        Subject = template.Subject,
+                        Body = template.Body,
+                        IsHtml = template.IsHtml
+                    };
 
-                    Interlocked.Increment(ref queuedEmailsCount);
-                }
-                catch (Exception ex)
+                    try
+                    {
+                        await rabbitMQService.PublishAsync(
+                            exchange: topology.Exchange,
+                            message: emailMessage,
+                            routingKey: "emails.send"
+                        );
+
+                        Interlocked.Increment(ref queuedEmailsCount);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Falha ao enfileirar o e-mail para: {Email}", email);
+                    }
+                });
+
+                await Task.WhenAll(tasks);
+
+                return Results.Ok(new
                 {
-                    logger.LogError(ex, "Falha ao enfileirar o e-mail para: {Email}", email);
-                }
-            });
-
-            await Task.WhenAll(tasks);
-
-            return Results.Ok(new
-            {
-                TotalEmails = emails.Count,
-                QueuedEmails = queuedEmailsCount,
-                Message = $"{queuedEmailsCount} e-mails foram enfileirados com sucesso para envio!"
-            });
-        })
-        .Accepts<UploadEmailsRequest>("multipart/form-data")
-        .WithName("UploadEmails")
-        .WithTags("Emails")
-        .DisableAntiforgery()
-        .AllowAnonymous();
+                    TotalEmailsLidos = emails.Count,
+                    EmailsUnicos = uniqueEmails.Count,
+                    QueuedEmails = queuedEmailsCount,
+                    Message = $"{queuedEmailsCount} e-mails foram enfileirados com sucesso para envio!"
+                });
+            })
+            .Accepts<UploadEmailsRequest>("multipart/form-data")
+            .WithName("UploadEmails")
+            .WithTags("Emails")
+            .DisableAntiforgery()
+            .AllowAnonymous();
+        }
     }
 }

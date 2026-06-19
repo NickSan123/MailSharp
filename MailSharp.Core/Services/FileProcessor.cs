@@ -1,6 +1,7 @@
 ﻿using CsvHelper;
 using MiniExcelLibs;
 using System.Globalization;
+using System.Net.Mail;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -55,23 +56,25 @@ public class FileProcessor : IFileProcessor
 
     private static IEnumerable<string> ProcessExcel(Stream stream)
     {
-        var rows = MiniExcel.Query(stream);
         var emails = new HashSet<string>();
 
-        foreach (var row in rows)
+        foreach (IDictionary<string, object> row in MiniExcel.Query(stream, useHeaderRow: true))
         {
-            if (row is IDictionary<string, object> dict)
+
+            foreach (var email in row.Values.Where(x => !string.IsNullOrWhiteSpace(x.ToString()))
+                    .SelectMany(x => x.ToString().Split([',', ';', '\n', '\r'],
+                        StringSplitOptions.RemoveEmptyEntries))
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Where(x => MailAddress.TryCreate(x, out _))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList())
             {
-                foreach (var value in dict.Values)
-                {
-                    var email = value?.ToString()?.Trim();
-                    if (IsValidEmail(email))
-                        emails.Add(email!);
-                }
+                if (IsValidEmail(email.ToString()))
+                    emails.Add(email.ToString());
             }
         }
-
-        return emails;
+            return emails;
     }
 
     private static IEnumerable<string> ProcessText(Stream stream)

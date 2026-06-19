@@ -1,9 +1,10 @@
-using DotNetEnv;
+Ôªøusing DotNetEnv;
+using easy_rabbitmq.Configuration;
 using easy_rabbitmq.Extensions;
-using MailSharp.Worker;
+using easy_rabbitmq.Hosting;
 using MailSharp.Infrastructure.Extensions;
 
-Env.Load();
+//Env.Load();
 
 var builder = Host.CreateDefaultBuilder(args)
     .ConfigureServices((hostContext, services) =>
@@ -22,7 +23,29 @@ var builder = Host.CreateDefaultBuilder(args)
         {
             int.TryParse(rabbit_port, out rabbitPort);
         }
-        
+
+        var topology = new RabbitMQTopology
+        {
+            Exchange = "mailsharp.emails",
+            ExchangeType = easy_rabbitmq.Enums.RabbitMQExchangeType.Direct,
+            Durable = true,
+            Queues =
+                [
+                    new()
+                    {
+                        Queue = "mailsharp.emails",
+                        RoutingKey = "emails.send",
+                        Durable = true
+                    }
+                ],
+            Retry = new RabbitMQRetryOptions
+            {
+                Enabled = true,
+                Delays = [10, 30, 60], // segundos
+                RetrySuffix = ".retry",
+                DeadSuffix = ".dead"
+            }
+        };
 
         services.AddEasyRabbitMQ(options =>
         {
@@ -32,9 +55,14 @@ var builder = Host.CreateDefaultBuilder(args)
             options.Password = rabbit_password ?? "guest";
             options.ClientProvidedName = rabbit_client_provided_name ?? "mailsharp-service";
             options.VirtualHost = rabbit_virtual_host ?? "/";
-        });
+        }, topology);
 
-        // Adicione a configuraÁ„o do SMTP
+        services.AddEasyRabbitMQHosting();
+
+        // Scan autom√°tico dos handlers
+        services.AddRabbitMQConsumersFromAssembly(typeof(Program).Assembly);
+
+        // Adicione a configura√ß√£o do SMTP
         services.AddMailService(options =>
         {
             options.Host = Environment.GetEnvironmentVariable("SMTP_HOST") ?? "";
@@ -50,17 +78,18 @@ var builder = Host.CreateDefaultBuilder(args)
         var connectionString = Environment.GetEnvironmentVariable("MAILSHARP_DB_CONNECTION") ?? "Host=localhost;Port=5432;Database=mailsharp_db;Username=postgres;Password=postgres";
         services.AddMailSharpDatabase(connectionString);
 
-        // Adicione o Worker como um serviÁo hospedado
-        services.AddHostedService<EmailQueueWorker>();
+        // Adicione o Worker como um servi√ßo hospedado
+        //services.AddHostedService<EmailQueueWorker>();
+        services.AddRabbitMQConsumersFromAssembly(typeof(Program).Assembly);
     });
 
 var host = builder.Build();
 
-// Crie um escopo para resolver serviÁos antes de iniciar a aplicaÁ„o
+// Crie um escopo para resolver servi√ßos antes de iniciar a aplica√ß√£o
 using (var scope = host.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 }
 
-// Agora que a infraestrutura est· pronta, inicie o host de forma assÌncrona
+// Agora que a infraestrutura est√° pronta, inicie o host de forma ass√≠ncrona
 await host.RunAsync();

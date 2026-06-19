@@ -1,4 +1,5 @@
 ﻿using DotNetEnv;
+using easy_rabbitmq.Configuration;
 using easy_rabbitmq.Extensions;
 using MailSharp.ApiService.Endpoints;
 using MailSharp.Core.Services;
@@ -33,6 +34,30 @@ builder.Services.AddSingleton<IFileProcessor, FileProcessor>();
 // });
 
 // SMTP
+
+var topology = new RabbitMQTopology
+{
+    Exchange = "mailsharp.emails",
+    ExchangeType = easy_rabbitmq.Enums.RabbitMQExchangeType.Direct,
+    Durable = true,
+    Queues =
+    [
+        new()
+        {
+            Queue = "mailsharp.emails",
+            RoutingKey = "emails.send",
+            Durable = true
+        }
+    ],
+    Retry = new RabbitMQRetryOptions
+    {
+        Enabled = true,
+        Delays = [10, 30, 60], // segundos
+        RetrySuffix = ".retry",
+        DeadSuffix = ".dead"
+    }
+};
+
 builder.Services.AddEasyRabbitMQ(options =>
 {
     options.HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
@@ -41,7 +66,7 @@ builder.Services.AddEasyRabbitMQ(options =>
     options.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest";
     options.ClientProvidedName = Environment.GetEnvironmentVariable("CLIENT_PROVIDED_NAME") ?? "mailsharp-service";
     options.VirtualHost = "/";
-});
+}, topology);
 builder.Services.AddMailService(options =>
 {
     options.Host = Environment.GetEnvironmentVariable("SMTP_HOST") ?? "";
