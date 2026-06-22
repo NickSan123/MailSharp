@@ -79,7 +79,8 @@ namespace MailSharp.ApiService.Endpoints
                         To = email,
                         Subject = template.Subject,
                         Body = template.Body,
-                        IsHtml = template.IsHtml
+                        IsHtml = template.IsHtml,
+                        Cc = request.Cc,
                     };
 
                     try

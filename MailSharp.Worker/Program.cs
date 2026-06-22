@@ -4,7 +4,7 @@ using easy_rabbitmq.Extensions;
 using easy_rabbitmq.Hosting;
 using MailSharp.Infrastructure.Extensions;
 
-//Env.Load();
+Env.Load();
 
 var builder = Host.CreateDefaultBuilder(args)
     .ConfigureServices((hostContext, services) =>

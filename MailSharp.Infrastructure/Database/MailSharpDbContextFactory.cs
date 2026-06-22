@@ -9,7 +9,7 @@ public class MailSharpDbContextFactory : IDesignTimeDbContextFactory<MailSharpDb
     {
         // Use a connection string fixa ou de variável de ambiente
         var connectionString = Environment.GetEnvironmentVariable("MAILSHARP_DB_CONNECTION")
-                               ?? "Host=localhost;Port=5432;Database=mailsharp_db;Username=postgres;Password=postgres";
+                               ?? "Host=191.7.193.138;Port=5433;Database=MailSharp;Username=mobgo;Password=hJupDeWk4CxFT9rhyYtBGDos7bvC4tBxcnEkMQ34";
 
         var optionsBuilder = new DbContextOptionsBuilder<MailSharpDbContext>();
         optionsBuilder.UseNpgsql(connectionString);

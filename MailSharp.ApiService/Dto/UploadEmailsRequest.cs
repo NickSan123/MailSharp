@@ -9,4 +9,6 @@ public class UploadEmailsRequest
 
     [Required]
     public int TemplateId { get; set; }
+
+    public List<string> Cc { get; set; } = [];
 }

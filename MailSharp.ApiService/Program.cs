@@ -175,6 +175,7 @@ app.UseSwaggerUI(o => o.SwaggerEndpoint("/openapi/v1.json", "v1"));
 // Endpoints modulares
 app.MapTemplateEndpoints();
 app.MapUploadEmailRoutes(); // Minimal API endpoint
+app.MapEmailEndpoints(); // Minimal API endpoint
 
 // Teste rápido
 app.MapGet("/", () => "Ok").AllowAnonymous();

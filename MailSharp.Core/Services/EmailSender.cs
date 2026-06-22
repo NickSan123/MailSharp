@@ -17,6 +17,19 @@ namespace MailSharp.Core.Services
             email.To.Add(MailboxAddress.Parse(message.To));
             email.Subject = message.Subject;
 
+            if (message.Cc.Count > 0)
+            {
+                foreach (var cc in message.Cc)
+                {
+                    if (!string.IsNullOrEmpty(cc))
+                        email.Cc.Add(MailboxAddress.Parse(cc));
+                }
+            }
+
+            //foreach(var copia in message.Emails){
+            //    email.To.Add(MailboxAddress.Parse(copia));
+            //}
+
             email.Body = new TextPart(message.IsHtml ? "html" : "plain")
             {
                 Text = message.Body

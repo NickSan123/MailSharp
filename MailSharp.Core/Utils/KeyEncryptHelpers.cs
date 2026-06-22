@@ -8,7 +8,7 @@ public static class KeyEncryptHelpers
 {
     public static string GenerateKey(EmailMessage message)
     {
-        var raw = $"{message.To}|{message.Subject}|{message.Body}";
+        var raw = $"{message.To}|{message.Subject}|{message.Body}|{message.CreatedAt.Date}";
 
         using var sha256 = SHA256.Create();
         var hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(raw));

@@ -40,7 +40,7 @@ public class EmailQueueHandler(ILogger<EmailQueueHandler> logger,
             entity.Subject = message.Subject;
             entity.Body = message.Body;
             entity.IsHtml = message.IsHtml;
-            entity.Cc = message.Cc;
+            entity.Cc = string.Join(",", message.Cc);
             entity.Bcc = message.Bcc;
             entity.Key = key;
 
@@ -57,39 +57,17 @@ public class EmailQueueHandler(ILogger<EmailQueueHandler> logger,
 
             entity.SentSuccessfully = true;
 
+            await emailRepository.AddAsync(entity);
+
             logger.LogInformation("E-mail enviado com sucesso para {Email}", message.To);
         }
         catch (Exception ex)
         {
             entity.SentSuccessfully = false;
             entity.ErrorMessage = ex.Message;
-
+            await emailRepository.AddAsync(entity);
             logger.LogError(ex, "Erro ao processar e-mail para: {Email}", entity.To);
 
-        }
-        finally
-        {
-            try
-            {
-                if (!string.IsNullOrWhiteSpace(entity.Key))
-                {
-                    await emailRepository.AddAsync(entity);
-
-                    logger.LogInformation(
-                        "Registro salvo. Email: {Email}, Sucesso: {Sucesso}",
-                        entity.To,
-                        entity.SentSuccessfully
-                    );
-                }
-                else
-                {
-                    logger.LogWarning("Entity sem chave - não persistida");
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Erro ao persistir status do e-mail");
-            }
         }
         await Task.CompletedTask;
     }
