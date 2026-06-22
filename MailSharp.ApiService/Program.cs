@@ -58,14 +58,21 @@ var topology = new RabbitMQTopology
     }
 };
 
+//var rabbit_host_name = hostContext.Configuration["rabbit_host_name"];
+//var rabbit_port = hostContext.Configuration["rabbit_port"];
+//var rabbit_user_name = hostContext.Configuration["rabbit_user_name"];
+//var rabbit_password = hostContext.Configuration["rabbit_password"];
+//var rabbit_virtual_host = hostContext.Configuration["rabbit_virtual_host"];
+//var rabbit_client_provided_name = hostContext.Configuration["rabbit_client_provided_name"];
+
 builder.Services.AddEasyRabbitMQ(options =>
 {
-    options.HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
-    options.Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT") ?? "5672");
-    options.UserName = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME") ?? "guest";
-    options.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest";
-    options.ClientProvidedName = Environment.GetEnvironmentVariable("CLIENT_PROVIDED_NAME") ?? "mailsharp-service";
-    options.VirtualHost = "/";
+    options.HostName = Environment.GetEnvironmentVariable("rabbit_host_name") ?? "localhost";
+    options.Port = int.Parse(Environment.GetEnvironmentVariable("rabbit_port") ?? "5672");
+    options.UserName = Environment.GetEnvironmentVariable("rabbit_user_name") ?? "guest";
+    options.Password = Environment.GetEnvironmentVariable("rabbit_password") ?? "guest";
+    options.ClientProvidedName = Environment.GetEnvironmentVariable("rabbit_client_provided_name") ?? "mailsharp-service";
+    options.VirtualHost = Environment.GetEnvironmentVariable("rabbit_virtual_host") ?? "/";
 }, topology);
 builder.Services.AddMailService(options =>
 {
